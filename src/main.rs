@@ -11,18 +11,18 @@ extern crate r0;
 extern crate stm32f7_discovery as stm32f7;
 
 use alloc::String;
-use alloc::string::ToString;
 use alloc::Vec;
+use alloc::string::ToString;
 use core::{ptr, fmt::Write};
 use stm32f7::lcd::font::FontRenderer;
-use stm32f7::{board, embedded, lcd, sdram, system_clock, touch, i2c};
+use stm32f7::{board, embedded, lcd, lcd::Color, sdram, system_clock, touch, i2c};
 
 const FPS: i32 = 60;
 
 static TTF: &[u8] = include_bytes!("../RobotoMono-Bold.ttf");
 
 mod renderer;
-use renderer::{Renderer};
+use renderer::Renderer;
 
 mod block;
 use block::Block;
@@ -124,7 +124,7 @@ fn main(hw: board::Hardware) -> ! {
 
     // lcd controller
     let mut lcd = lcd::init(ltdc, rcc, &mut gpio);
-    let bg_color = lcd::Color::from_hex(0x000000);
+    let bg_color = Color::from_hex(0x000000);
     //cd.set_background_color(bg_color);
     let mut layer_1 = lcd.layer_1().unwrap();
     let mut layer_2 = lcd.layer_2().unwrap();
@@ -143,7 +143,7 @@ fn main(hw: board::Hardware) -> ! {
 
     let mut renderer = Renderer::new(layer_1, bg_color);
     renderer.set_portrait(true);
-    
+
     let highscore: &mut i32 = &mut 0;
 
     loop {
@@ -154,7 +154,7 @@ fn main(hw: board::Hardware) -> ! {
 fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     renderer.clear();
 
-    let white_color = lcd::Color::from_hex(0xffffff);
+    let white_color = Color::from_hex(0xffffff);
 
     let xmax = renderer.get_width();
     let ymax = renderer.get_height();
@@ -167,42 +167,24 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     let mut last_block_start = (xmax - last_block_width) / 2;
     let mut last_tapped = false;
     let mut last_ms = system_clock::ticks();
-    let mut block_color = lcd::Color::rgb(255, 255, 255);
+    let mut block_color = Color::rgb(255, 255, 255);
     let mut ms = system_clock::ticks();
-    let mut h = 0f32;
-    let mut s = 0.8f32;
-    let mut v = 1f32;
-    block_color = Renderer::hsv_color(h, s, v);
 
-    draw_block(
-        renderer,
-        last_block_start - 1,
-        ymax - block_height,
-        last_block_width,
-        block_height,
-        block_color,
-    );
+    let base_x = xmax / 2;
+    let mut base_y = ymax;
 
-    h += 20f32;
-    block_color = Renderer::hsv_color(h, s, v);
 
     let font_renderer = FontRenderer::new(TTF, 20.0);
     font_renderer.render("Current Score", get_font_drawer(renderer, 0, 0));
-    font_renderer.render(
-        "Highscore",
-        get_font_drawer(renderer, xmax - 81, 0),
-    );
+    font_renderer.render("Highscore", get_font_drawer(renderer, xmax - 81, 0));
 
     let mut redraw_score = true;
     let mut redraw_highscore = true;
 
     let mut blocks = Vec::new();
-    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, -10, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, -20, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, -30, -20, 80, 10, 60));
-    blocks.push(Block::new(0, -40, 0, 60, 10, 40));
-    blocks.push(Block::new(0, -50, 0, 40, 10, 20));
+    let mut current_block = Block::new(-50, -60, -50, 100, 60, 100);
+    blocks.push(current_block);
+    current_block = Block::new(-50, -60 - block_height, -50, 100, block_height, 100);
 
     loop {
         ms = system_clock::ticks();
@@ -211,7 +193,11 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         let range_start = last_block_start - 5 * last_block_width / 4;
         let range_width = 10 * last_block_width / 4;
 
-        let mut p_time = 15 * block_width + 500;
+        let mut size = current_block.width;
+        if current_block.depth > size {
+            size = current_block.depth;
+        }
+        let mut p_time = 15 * size + 500;
         let mut p = ((ms - last_ms) as i32 % p_time) as f32 / p_time as f32 * 2f32;
         if p > 1f32 {
             p = 2f32 - p;
@@ -219,53 +205,60 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         p = -2f32 * p * p * p + 3f32 * p * p;
         let mut block_start = range_start + (p * range_width as f32) as i32;
 
-        for b in &blocks {
-            b.draw(renderer, xmax / 2, ymax / 2);
+        for (i, b) in blocks.iter().enumerate() {
+            let mut color = Color::rgb(180, 180, 180);
+            if i == blocks.len() - 1 {
+                color = Color::rgb(255, 0, 0);
+            }
+            b.draw(renderer, base_x, base_y, color);
         }
 
-        draw_block(
-            renderer,
-            block_start,
-            ymax - cur_stack_height - block_height,
-            block_width,
-            block_height,
-            block_color,
-        );
+        {
+            let last_block = &blocks.last().unwrap();
+            if score % 2 == 0 {
+                current_block.x =
+                    ((3f32 * current_block.width as f32 * (p - 0.5f32)) as i32 - current_block.width / 2 + last_block.x + last_block.width / 2) / 2 * 2;
+            } else {
+                current_block.z =
+                    ((3f32 * current_block.depth as f32 * (p - 0.5f32)) as i32 - current_block.depth / 2 + last_block.y + last_block.depth / 2) / 2 * 2;
+            }
+            current_block.draw(renderer, base_x, base_y, white_color);
+        }
+
 
         // poll for new touch data
         let mut tapped = false;
-        for touch in &touch::touches(i2c_3).unwrap() {
-            tapped = true;
-        }
+        tapped = !&touch::touches(i2c_3).unwrap().is_empty();
 
         renderer.end_frame();
 
         if tapped && !last_tapped {
-            renderer.flush();
-            if block_start < last_block_start {
-                block_width -= last_block_start - block_start;
-                block_start = last_block_start;
+            {
+                let last_block = &blocks.last().unwrap();
+                if current_block.x < last_block.x {
+                    current_block.width -= last_block.x - current_block.x;
+                    current_block.x = last_block.x;
+                }
+                if current_block.x + current_block.width > last_block.x + last_block.width {
+                    current_block.width -= current_block.x + current_block.width - last_block.x - last_block.width;
+                }
+                if current_block.z < last_block.z {
+                    current_block.depth -= last_block.z - current_block.z;
+                    current_block.z = last_block.z;
+                }
+                if current_block.z + current_block.depth > last_block.z + last_block.depth {
+                    current_block.depth -= current_block.z + current_block.depth - last_block.z - last_block.depth;
+                }
             }
-            if block_start + block_width > last_block_start + last_block_width {
-                block_width -= block_start + block_width - last_block_start - last_block_width;
-            }
-            draw_block(
-                renderer,
-                block_start,
-                ymax - cur_stack_height + 1 - block_height,
-                block_width,
-                block_height + 1,
-                block_color,
-            );
 
-            last_block_start = block_start;
-            last_block_width = block_width;
-            cur_stack_height += block_height;
+            blocks.push(current_block);
+            let last_block = &blocks.last().unwrap();
+            current_block = Block::new(last_block.x, last_block.y - block_height, last_block.z, last_block.width, block_height, last_block.depth);
+
+
             last_ms = ms - (ms as i32 % 100) as usize;
-            h += 15f32;
-            block_color = Renderer::hsv_color(h, s, v);
 
-            if block_width < 3 {
+            if current_block.width < 4 || current_block.height < 4 {
                 return;
             }
 
@@ -281,10 +274,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
         if redraw_score {
             renderer.clear_area(0, 20, 20, 40);
-            font_renderer.render(
-                &score.to_string(),
-                get_font_drawer(renderer, 0, 20),
-            );
+            font_renderer.render(&score.to_string(), get_font_drawer(renderer, 0, 20));
             redraw_score = false;
         }
         if redraw_highscore {
@@ -316,34 +306,7 @@ fn get_font_drawer<'a>(
     move |x, y, v| {
         let i = (255f32 * v) as u8;
         if i > 128 {
-            renderer.set_pixel(
-                x as i32 + px,
-                y as i32 + py,
-                lcd::Color::rgb(i, i, i),
-            );
+            renderer.set_pixel(x as i32 + px, y as i32 + py, Color::rgb(i, i, i));
         }
     }
 }
-
-fn draw_block(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
-    d.draw_rect(x, y, w, h, color);
-    for i in 0..h / 15 {
-        d.draw_rect(x + w / 2 - 3, y + i * 15 + 5, 9, 7, color);
-        d.draw_line(
-            x + w / 2 + 1,
-            y + i * 15 + 5,
-            x + w / 2 + 1,
-            y + i * 15 + 11,
-            color,
-        );
-        d.draw_line(
-            x + w / 2 - 3,
-            y + i * 15 + 8,
-            x + w / 2 + 5,
-            y + i * 15 + 8,
-            color,
-        );
-    }
-}
-
-

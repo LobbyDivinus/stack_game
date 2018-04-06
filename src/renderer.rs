@@ -209,7 +209,7 @@ impl Renderer {
         self.draw_line(x + width, y + width / 2 + height, x + width + depth, y + width / 2 - depth / 2 + height, color);
 
         self.draw_line(x, y, x, y + height, color);
-        self.draw_line(x + width, y + width / 2, x + width, y + width / 2 + height, color);
+        self.draw_line(x + width - 1, y + width / 2, x + width - 1, y + width / 2 + height, color);
         self.draw_line(x + width + depth, y + width / 2 - depth / 2, x + width + depth, y + width / 2 - depth / 2 + height, color);
     }
 
