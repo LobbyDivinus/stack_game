@@ -288,7 +288,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
 
     let white_color = lcd::Color::from_hex(0xffffff);
 
-    let block_height = 27;
+    let block_height = 15;
     let mut cur_stack_height = block_height;
     let mut block_width = 150;
     let mut last_block_width = block_width;
@@ -313,7 +313,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
 
     block_color = hsv_color(h, s, v);
 
-    let font_renderer = FontRenderer::new(TTF, 14.0);
+    let font_renderer = FontRenderer::new(TTF, 20.0);
 
     loop {
         ms = system_clock::ticks();
@@ -377,15 +377,10 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
             }
 
             renderer.clear_area(WIDTH - 20, 0, 20, HEIGHT);
-            let mut text = String::from("Hi");
-            text.push_str("hi");
+            let mut text = String::new();
+            text.push_str("Current score: ");
             text.push_str(&cur_stack_height.to_string());
-            font_renderer.render(&text, |x,y,v| {
-                let i = (255f32 * v) as u8;
-                if i > 128 {
-                    renderer.set_pixel(WIDTH - y as i32, x as i32, lcd::Color::rgb(i, i, i));
-                }
-            });
+            font_renderer.render(&text, get_font_drawer(renderer, 0, 0));
         }
         last_tapped = tapped;
 
@@ -396,6 +391,15 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
             if cur_ms - ms >= ms_per_frame {
                 break;
             }
+        }
+    }
+}
+
+fn get_font_drawer(renderer: &mut Renderer, px: i32, py: i32) -> Fn(i32, i32, i32) {
+    |x,y,v| {
+        let i = (255f32 * v) as u8;
+        if i > 128 {
+            renderer.set_pixel(WIDTH - y as i32 + py, x as i32 + px, lcd::Color::rgb(i, i, i));
         }
     }
 }
