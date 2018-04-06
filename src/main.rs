@@ -12,158 +12,18 @@ extern crate stm32f7_discovery as stm32f7;
 
 use alloc::String;
 use alloc::string::ToString;
-use alloc::boxed::{Box,FnBox};
 use core::{ptr, fmt::Write};
 use stm32f7::lcd::font::FontRenderer;
 use stm32f7::{board, embedded, lcd, sdram, system_clock, touch, i2c};
 
-const WIDTH: i32 = 480;
-const HEIGHT: i32 = 272;
-const PIXEL_BUFFER_SIZE: usize = 4000;
+
 const FPS: i32 = 60;
 
 static TTF: &[u8] = include_bytes!("../RobotoMono-Bold.ttf");
 
-struct Point {
-    x: i16,
-    y: i16,
-}
+mod renderer;
+use renderer::{Renderer, WIDTH, HEIGHT};
 
-impl Copy for Point {}
-impl Clone for Point {
-    fn clone(&self) -> Point {
-        Point {
-            x: self.x,
-            y: self.y,
-        }
-    }
-}
-
-struct Renderer {
-    bg_color: lcd::Color,
-    pixel_markers: [bool; (WIDTH * HEIGHT) as usize],
-    drawn_pixels: [Point; 2 * PIXEL_BUFFER_SIZE],
-    drawn_pixel_count: [usize; 2],
-    current_buffer: u8,
-    layer: lcd::Layer<lcd::FramebufferArgb8888>,
-    direct: bool,
-    frame_counter: i32,
-}
-
-impl Renderer {
-    fn new(l: lcd::Layer<lcd::FramebufferArgb8888>, background: lcd::Color) -> Renderer {
-        Renderer {
-            bg_color: background,
-            pixel_markers: [false; (WIDTH * HEIGHT) as usize],
-            drawn_pixels: [Point { x: 0, y: 0 }; 2 * PIXEL_BUFFER_SIZE],
-            drawn_pixel_count: [0; 2],
-            current_buffer: 0,
-            layer: l,
-            direct: true,
-            frame_counter: 0,
-        }
-    }
-
-    fn set_pixel(&mut self, x: i32, y: i32, color: lcd::Color) {
-        if x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT {
-            return;
-        }
-
-        if self.direct {
-            self.layer
-                .print_point_color_at(x as usize, y as usize, color);
-        } else {
-            self.pixel_markers[(x + y * WIDTH) as usize] = true;
-            let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
-            let index = self.drawn_pixel_count[self.current_buffer as usize] + offset;
-            self.drawn_pixels[index].x = x as i16;
-            self.drawn_pixels[index].y = y as i16;
-
-            let pixel = self.drawn_pixels[index];
-            self.layer
-                .print_point_color_at(pixel.x as usize, pixel.y as usize, color);
-
-            self.drawn_pixel_count[self.current_buffer as usize] += 1;
-        }
-    }
-
-    fn begin_frame(&mut self) {
-        let last_buffer = 1 - self.current_buffer;
-        let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
-        let size = self.drawn_pixel_count[last_buffer as usize];
-        for i in offset..size + offset {
-            let pixel = self.drawn_pixels[i as usize];
-            let x = pixel.x as i32;
-            let y = pixel.y as i32;
-            self.pixel_markers[(x + y * WIDTH) as usize] = false;
-        }
-        self.drawn_pixel_count[self.current_buffer as usize] = 0;
-        self.direct = false;
-    }
-
-    fn end_frame(&mut self) {
-        let last_buffer = 1 - self.current_buffer;
-        let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
-        let size = self.drawn_pixel_count[last_buffer as usize];
-        for i in 0..size {
-            let pixel = self.drawn_pixels[(i + offset) as usize];
-            let x = pixel.x as i32;
-            let y = pixel.y as i32;
-            if !self.pixel_markers[(x + y * WIDTH) as usize] {
-                let color = self.get_background(x, y);
-                self.layer
-                    .print_point_color_at(x as usize, y as usize, color);
-            }
-        }
-
-        self.current_buffer = last_buffer;
-        self.frame_counter += 1;
-        self.direct = true;
-    }
-
-    fn flush(&mut self) {
-        for buf in 0..2 {
-            let offset = buf as usize * PIXEL_BUFFER_SIZE;
-            let size = self.drawn_pixel_count[buf as usize];
-            for i in 0..size {
-                let pixel = self.drawn_pixels[(i + offset) as usize];
-                let x = pixel.x as i32;
-                let y = pixel.y as i32;
-                let color = self.get_background(x, y);
-                self.layer
-                    .print_point_color_at(x as usize, y as usize, color);
-                self.pixel_markers[(x + y * WIDTH) as usize] = false;
-            }
-            self.drawn_pixel_count[buf as usize] = 0;
-        }
-    }
-
-    fn clear(&mut self) {
-        self.flush();
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                let color = self.get_background(x, y);
-                self.layer
-                    .print_point_color_at(x as usize, y as usize, color);
-            }
-        }
-    }
-
-    fn clear_area(&mut self, x: i32, y: i32, w: i32, h: i32) {
-        self.flush();
-        for py in y..y + h {
-            for px in x..x + w {
-                let color = self.get_background(px, py);
-                self.layer
-                    .print_point_color_at(px as usize, py as usize, color);
-            }
-        }
-    }
-
-    fn get_background(&self, x: i32, y: i32) -> lcd::Color {
-        lcd::Color::rgb((WIDTH / 8 - x / 8) as u8, 0, (x / 8) as u8)
-    }
-}
 
 #[no_mangle]
 pub unsafe extern "C" fn reset() -> ! {
@@ -280,18 +140,20 @@ fn main(hw: board::Hardware) -> ! {
     touch::check_family_id(&mut i2c_3).unwrap();
 
     let mut renderer = Renderer::new(layer_1, bg_color);
+    let highscore: &mut i32 = &mut 0;
 
     loop {
-        game(&mut renderer, &mut i2c_3);
+        game(&mut renderer, &mut i2c_3, highscore);
     }
 }
 
-fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
+fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     renderer.clear();
 
     let white_color = lcd::Color::from_hex(0xffffff);
 
     let block_height = 15;
+    let mut score = 0;
     let mut cur_stack_height = block_height;
     let mut block_width = 150;
     let mut last_block_width = block_width;
@@ -303,7 +165,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
     let mut h = 0f32;
     let mut s = 0.8f32;
     let mut v = 1f32;
-    block_color = hsv_color(h, s, v);
+    block_color = Renderer::hsv_color(h, s, v);
 
     draw_block(
         renderer,
@@ -314,9 +176,15 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
         block_color,
     );
 
-    block_color = hsv_color(h, s, v);
+    h += 20f32;
+    block_color = Renderer::hsv_color(h, s, v);
 
     let font_renderer = FontRenderer::new(TTF, 20.0);
+    font_renderer.render("Current Score", get_font_drawer_portrait(renderer, 0, 0));
+    font_renderer.render("Highscore", get_font_drawer_portrait(renderer, HEIGHT - 90, 0));
+
+    let mut redraw_score = true;
+    let mut redraw_highscore = true;
 
     loop {
         ms = system_clock::ticks();
@@ -373,20 +241,32 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
             cur_stack_height += block_height;
             last_ms = ms - (ms as i32 % 100) as usize;
             h += 15f32;
-            block_color = hsv_color(h, s, v);
+            block_color = Renderer::hsv_color(h, s, v);
 
             if block_width < 3 {
                 return;
             }
 
-            renderer.clear_area(WIDTH - 20, 0, 20, HEIGHT);
-            let mut text = String::new();
-            text.push_str("Current score: ");
-            text.push_str(&cur_stack_height.to_string());
-            //let f = get_font_drawer(renderer, 0, 0);
-            //font_renderer.render(&text, f);
+            score += 1;
+            if score > *highscore {
+                *highscore = score;
+                redraw_highscore = true;
+            }
+
+            redraw_score = true;
         }
         last_tapped = tapped;
+
+        if redraw_score {
+            renderer.clear_area(WIDTH - 40, 0, 20, 40);
+            font_renderer.render(&score.to_string(), get_font_drawer_portrait(renderer, 0, 20));
+            redraw_score = false;
+        }
+        if redraw_highscore {
+            renderer.clear_area(WIDTH - 40, HEIGHT - 40, 20, 40);
+            font_renderer.render(&(*highscore).to_string(), get_font_drawer_portrait(renderer, HEIGHT - 40, 20));
+            redraw_highscore = false;
+        }
 
         // Timer
         let ms_per_frame = (1000 / FPS) as usize;
@@ -399,76 +279,28 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
     }
 }
 
-/*fn get_font_drawer(renderer: &'static mut Renderer, px: &'static i32, py: &'static i32) -> Box<Fn(usize, usize, f32)> {
-    Box::new(|x,y,v| {
+fn get_font_drawer_portrait<'a>(renderer: &'a mut Renderer, px: i32, py: i32) -> impl FnMut(usize, usize, f32) + 'a {
+    move |x,y,v| {
         let i = (255f32 * v) as u8;
         if i > 128 {
-            renderer.set_pixel(WIDTH - y as i32 + py, x as i32 + px, lcd::Color::rgb(i, i, i));
+            renderer.set_pixel(WIDTH - y as i32 - py, x as i32 + px, lcd::Color::rgb(i, i, i));
         }
-    })
-}*/
-
-fn abs(x: f32) -> f32 {
-    if x < 0f32 {
-        -x
-    } else {
-        x
     }
 }
 
-fn hsv_color(hue: f32, s: f32, v: f32) -> lcd::Color {
-    let h = (hue as i32 % 360) as f32;
-
-    let c = v * s;
-    let x = c * (1f32 - abs((h as i32 % 120) as f32 / 60f32 - 1f32));
-    let m = v - c;
-
-    let mut rgb = (0f32, 0f32, 0f32);
-    if h < 60f32 {
-        rgb.0 = c;
-        rgb.1 = x;
-    } else if h < 120f32 {
-        rgb.0 = x;
-        rgb.1 = c;
-    } else if h < 180f32 {
-        rgb.1 = c;
-        rgb.2 = x;
-    } else if h < 240f32 {
-        rgb.1 = x;
-        rgb.2 = c;
-    } else if h < 300f32 {
-        rgb.0 = x;
-        rgb.2 = c;
-    } else {
-        rgb.0 = c;
-        rgb.2 = x;
-    }
-
-    rgb.0 += m;
-    rgb.1 += m;
-    rgb.2 += m;
-
-    lcd::Color::rgb(
-        (255f32 * rgb.0) as u8,
-        (255f32 * rgb.1) as u8,
-        (255f32 * rgb.2) as u8,
-    )
-}
 
 fn draw_block(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
-    draw_rect(d, x, y, w, h, color);
+    d.draw_rect(x, y, w, h, color);
     for i in 0..h / 15 {
-        draw_rect(d, x + w / 2 - 3, y + i * 15 + 5, 9, 7, color);
-        draw_line(
-            d,
+        d.draw_rect(x + w / 2 - 3, y + i * 15 + 5, 9, 7, color);
+        d.draw_line(
             x + w / 2 + 1,
             y + i * 15 + 5,
             x + w / 2 + 1,
             y + i * 15 + 11,
             color,
         );
-        draw_line(
-            d,
+        d.draw_line(
             x + w / 2 - 3,
             y + i * 15 + 8,
             x + w / 2 + 5,
@@ -478,68 +310,4 @@ fn draw_block(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Colo
     }
 }
 
-fn draw_line(d: &mut Renderer, x0: i32, y0: i32, x1: i32, y1: i32, color: lcd::Color) {
-    if y0 == y1 {
-        for px in x0..=x1 {
-            d.set_pixel(px, y0, color);
-        }
-    } else if x0 == x1 {
-        for py in y0..=y1 {
-            d.set_pixel(x0, py, color)
-        }
-    } else {
-        let d_x = x1 - x0;
-        let d_y = y1 - y0;
-        let mut d_err = d_y as f32 / d_x as f32;
-        if d_err < 0f32 {
-            d_err = -d_err;
-        }
-        let mut error = 0f32;
-        let mut y = y0;
-        let mut sign_d_x = 1;
-        let mut abs_d_x = d_x;
-        if abs_d_x < 0 {
-            abs_d_x = -abs_d_x;
-            sign_d_x = -1;
-        }
-        for i in 0..=abs_d_x {
-            let x = x0 + sign_d_x * i;
-            d.set_pixel(x, y, color);
-            error = error + d_err;
-            while error >= 0.5f32 {
-                if d_y > 0 {
-                    y += 1;
-                } else if d_y < 0 {
-                    y -= 1;
-                }
-                if error >= 1.5f32 {
-                    d.set_pixel(x, y, color);
-                }
-                error = error - 1f32;
-            }
-        }
-    }
-}
 
-fn draw_rect_solid(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
-    for py in y..y + h {
-        for px in x..x + w {
-            d.set_pixel(px, py, color);
-        }
-    }
-}
-
-fn draw_rect(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
-    for px in x..x + w {
-        d.set_pixel(px, y, color);
-    }
-    for py in y + 1..y + h - 1 {
-        d.set_pixel(x, py, color);
-    }
-    for py in y + 1..y + h - 1 {
-        d.set_pixel((x + w - 1), py, color);
-    }
-    for px in x..x + w {
-        d.set_pixel(px, (y + h - 1), color);
-    }
-}
