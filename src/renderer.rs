@@ -33,6 +33,7 @@ pub struct Renderer {
     layer: lcd::Layer<lcd::FramebufferArgb8888>,
     direct: bool,
     frame_counter: i32,
+    portrait: bool
 }
 
 impl Renderer {
@@ -46,10 +47,19 @@ impl Renderer {
             layer: l,
             direct: true,
             frame_counter: 0,
+            portrait: false
         }
     }
 
-    pub fn set_pixel(&mut self, x: i32, y: i32, color: lcd::Color) {
+    pub fn set_pixel(&mut self, px: i32, py: i32, color: lcd::Color) {
+        let mut x = px;
+        let mut y = py;
+
+        if (self.portrait) {
+            x = WIDTH - py;
+            y = px;
+        }
+
         if x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT {
             return;
         }
@@ -158,6 +168,23 @@ impl Renderer {
         color
     }
 
+    pub fn set_portrait(&mut self, state: bool) {
+        self.portrait = state;
+    }
+
+    pub fn draw_block_3d(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, color: lcd::Color) {
+        self.draw_line(x, y, x + width, y + width / 2, color);
+        self.draw_line(x + width, y + width / 2, x + width + depth, y + width / 2 - depth / 2, color);
+        self.draw_line(x, y, x + depth, y - depth / 2, color);
+        self.draw_line(x + depth, y - depth / 2, x + width + depth, y + width / 2 - depth / 2, color);
+
+        self.draw_line(x, y + height, x + width, y + width / 2 + height, color);
+        self.draw_line(x + width, y + width / 2 + height, x + width + depth, y + width / 2 - depth / 2 + height, color);
+
+        self.draw_line(x, y, x, y + height, color);
+        self.draw_line(x + width, y + width / 2, x + width, y + width / 2 + height, color);
+        self.draw_line(x + width + depth, y + width / 2 - depth / 2, x + width + depth, y + width / 2 - depth / 2 + height, color);
+    }
 
     pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: lcd::Color) {
         if y0 == y1 {

@@ -201,6 +201,11 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         p = -2f32 * p * p * p + 3f32 * p * p;
         let mut block_start = range_start + (p * range_width as f32) as i32;
 
+        renderer.set_portrait(true);
+        //renderer.draw_block_3d(40, 100, 80, 20, 60, block_color);
+        renderer.set_portrait(false);
+
+
         draw_block(
             renderer,
             cur_stack_height,
