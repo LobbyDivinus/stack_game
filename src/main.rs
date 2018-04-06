@@ -399,6 +399,14 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
     }
 }
 
+/*fn get_font_drawer(renderer: &'static mut Renderer, px: &'static i32, py: &'static i32) -> Box<Fn(usize, usize, f32)> {
+    Box::new(|x,y,v| {
+        let i = (255f32 * v) as u8;
+        if i > 128 {
+            renderer.set_pixel(WIDTH - y as i32 + py, x as i32 + px, lcd::Color::rgb(i, i, i));
+        }
+    })
+}*/
 
 fn abs(x: f32) -> f32 {
     if x < 0f32 {
