@@ -193,11 +193,11 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
     let mut blocks = Vec::new();
     blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
-    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
-    blocks.push(Block::new(0, -10, 0, 60, 10, 40));
-    blocks.push(Block::new(0, -20, 0, 40, 10, 20));
+    blocks.push(Block::new(-20, -10, -20, 80, 10, 60));
+    blocks.push(Block::new(-20, -20, -20, 80, 10, 60));
+    blocks.push(Block::new(-20, -30, -20, 80, 10, 60));
+    blocks.push(Block::new(0, -40, 0, 60, 10, 40));
+    blocks.push(Block::new(0, -50, 0, 40, 10, 20));
 
     loop {
         ms = system_clock::ticks();
@@ -228,7 +228,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
             block_width,
             block_color,
         );
-        
+
 
         // poll for new touch data
         let mut tapped = false;
