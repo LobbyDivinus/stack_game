@@ -1,3 +1,4 @@
 /.cargo
 target
 .idea
+/st-util.lnk
