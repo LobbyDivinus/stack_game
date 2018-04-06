@@ -288,7 +288,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
 
     let white_color = lcd::Color::from_hex(0xffffff);
 
-    let block_height = 16;
+    let block_height = 27;
     let mut cur_stack_height = block_height;
     let mut block_width = 150;
     let mut last_block_width = block_width;
