@@ -12,18 +12,20 @@ extern crate stm32f7_discovery as stm32f7;
 
 use alloc::String;
 use alloc::string::ToString;
+use alloc::Vec;
 use core::{ptr, fmt::Write};
 use stm32f7::lcd::font::FontRenderer;
 use stm32f7::{board, embedded, lcd, sdram, system_clock, touch, i2c};
-
 
 const FPS: i32 = 60;
 
 static TTF: &[u8] = include_bytes!("../RobotoMono-Bold.ttf");
 
 mod renderer;
-use renderer::{Renderer, WIDTH, HEIGHT};
+use renderer::{Renderer, HEIGHT, WIDTH};
 
+mod block;
+use block::Block;
 
 #[no_mangle]
 pub unsafe extern "C" fn reset() -> ! {
@@ -181,10 +183,21 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
     let font_renderer = FontRenderer::new(TTF, 20.0);
     font_renderer.render("Current Score", get_font_drawer_portrait(renderer, 0, 0));
-    font_renderer.render("Highscore", get_font_drawer_portrait(renderer, HEIGHT - 81, 0));
+    font_renderer.render(
+        "Highscore",
+        get_font_drawer_portrait(renderer, HEIGHT - 81, 0),
+    );
 
     let mut redraw_score = true;
     let mut redraw_highscore = true;
+
+    let mut blocks = Vec::new();
+    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
+    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
+    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
+    blocks.push(Block::new(-20, 0, -20, 80, 10, 60));
+    blocks.push(Block::new(0, -10, 0, 60, 10, 40));
+    blocks.push(Block::new(0, -20, 0, 40, 10, 20));
 
     loop {
         ms = system_clock::ticks();
@@ -202,9 +215,10 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         let mut block_start = range_start + (p * range_width as f32) as i32;
 
         renderer.set_portrait(true);
-        //renderer.draw_block_3d(40, 100, 80, 20, 60, block_color);
+        for b in &blocks {
+            b.draw(renderer, HEIGHT / 2, WIDTH / 2);
+        }
         renderer.set_portrait(false);
-
 
         draw_block(
             renderer,
@@ -214,6 +228,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
             block_width,
             block_color,
         );
+        
 
         // poll for new touch data
         let mut tapped = false;
@@ -264,13 +279,19 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
         if redraw_score {
             renderer.clear_area(WIDTH - 40, 0, 20, 40);
-            font_renderer.render(&score.to_string(), get_font_drawer_portrait(renderer, 0, 20));
+            font_renderer.render(
+                &score.to_string(),
+                get_font_drawer_portrait(renderer, 0, 20),
+            );
             redraw_score = false;
         }
         if redraw_highscore {
             renderer.clear_area(WIDTH - 40, HEIGHT - 40, 20, 40);
             let text = (*highscore).to_string();
-            font_renderer.render(&text, get_font_drawer_portrait(renderer, HEIGHT - 9 * text.chars().count() as i32, 20));
+            font_renderer.render(
+                &text,
+                get_font_drawer_portrait(renderer, HEIGHT - 9 * text.chars().count() as i32, 20),
+            );
             redraw_highscore = false;
         }
 
@@ -285,15 +306,22 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     }
 }
 
-fn get_font_drawer_portrait<'a>(renderer: &'a mut Renderer, px: i32, py: i32) -> impl FnMut(usize, usize, f32) + 'a {
-    move |x,y,v| {
+fn get_font_drawer_portrait<'a>(
+    renderer: &'a mut Renderer,
+    px: i32,
+    py: i32,
+) -> impl FnMut(usize, usize, f32) + 'a {
+    move |x, y, v| {
         let i = (255f32 * v) as u8;
         if i > 128 {
-            renderer.set_pixel(WIDTH - y as i32 - py, x as i32 + px, lcd::Color::rgb(i, i, i));
+            renderer.set_pixel(
+                WIDTH - y as i32 - py,
+                x as i32 + px,
+                lcd::Color::rgb(i, i, i),
+            );
         }
     }
 }
-
 
 fn draw_block(d: &mut Renderer, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
     d.draw_rect(x, y, w, h, color);

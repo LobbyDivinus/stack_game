@@ -1,7 +1,7 @@
 [package]
 name = "stack"
 version = "0.1.0"
-authors = ["Fabio B. <f-bro@mailbox.org>"]
+authors = ["Meng Meng Yan, Philipp Köhl, Fabian Miltenberger"]
 
 [dependencies]
 cortex-m = "0.1.4"
