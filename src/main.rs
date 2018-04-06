@@ -181,7 +181,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
     let font_renderer = FontRenderer::new(TTF, 20.0);
     font_renderer.render("Current Score", get_font_drawer_portrait(renderer, 0, 0));
-    font_renderer.render("Highscore", get_font_drawer_portrait(renderer, HEIGHT - 90, 0));
+    font_renderer.render("Highscore", get_font_drawer_portrait(renderer, HEIGHT - 81, 0));
 
     let mut redraw_score = true;
     let mut redraw_highscore = true;
@@ -264,7 +264,8 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         }
         if redraw_highscore {
             renderer.clear_area(WIDTH - 40, HEIGHT - 40, 20, 40);
-            font_renderer.render(&(*highscore).to_string(), get_font_drawer_portrait(renderer, HEIGHT - 40, 20));
+            let text = (*highscore).to_string();
+            font_renderer.render(&text, get_font_drawer_portrait(renderer, HEIGHT - 9 * text.chars().count() as i32, 20));
             redraw_highscore = false;
         }
 

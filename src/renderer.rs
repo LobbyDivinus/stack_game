@@ -146,7 +146,16 @@ impl Renderer {
     }
 
     pub fn get_background(&self, x: i32, y: i32) -> lcd::Color {
-        lcd::Color::rgb((WIDTH / 8 - x / 8) as u8, 0, (x / 8) as u8)
+        let mut color = lcd::Color::rgb(0, ((WIDTH - x) / 5) as u8, 64);
+        if (1329 * (x ^ (y * 717)) + 971) % (WIDTH - x + 200) == 0 {
+            let mut alpha = 1f32 - (x as f32 / WIDTH as f32);
+            alpha *= alpha;
+            alpha = 1f32 - alpha;
+            color.red = ((1f32 - alpha) * color.red as f32 + alpha * 255f32) as u8;
+            color.green = ((1f32 - alpha) * color.green as f32 + alpha * 255f32) as u8;
+            color.blue = ((1f32 - alpha) * color.blue as f32 + alpha * 255f32) as u8;
+        }
+        color
     }
 
 
