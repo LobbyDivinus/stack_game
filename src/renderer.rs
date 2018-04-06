@@ -3,8 +3,8 @@ extern crate stm32f7_discovery as stm32f7;
 
 use stm32f7::lcd;
 
-pub const WIDTH: i32 = 480;
-pub const HEIGHT: i32 = 272;
+const WIDTH: i32 = 480;
+const HEIGHT: i32 = 272;
 
 const PIXEL_BUFFER_SIZE: usize = 4000;
 
@@ -33,7 +33,9 @@ pub struct Renderer {
     layer: lcd::Layer<lcd::FramebufferArgb8888>,
     direct: bool,
     frame_counter: i32,
-    portrait: bool
+    portrait: bool,
+    width: i32,
+    height: i32
 }
 
 impl Renderer {
@@ -47,7 +49,9 @@ impl Renderer {
             layer: l,
             direct: true,
             frame_counter: 0,
-            portrait: false
+            portrait: false,
+            width: WIDTH,
+            height: HEIGHT
         }
     }
 
@@ -145,6 +149,14 @@ impl Renderer {
     }
 
     pub fn clear_area(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        if (self.portrait) {
+            self.clear_area_landscape(WIDTH - y - h, x, h, w);
+        } else {
+            self.clear_area_landscape(x, y, w, h);
+        }
+    }
+
+    fn clear_area_landscape(&mut self, x: i32, y: i32, w: i32, h: i32) {
         self.flush();
         for py in y..y + h {
             for px in x..x + w {
@@ -170,6 +182,21 @@ impl Renderer {
 
     pub fn set_portrait(&mut self, state: bool) {
         self.portrait = state;
+        if state {
+            self.width = HEIGHT;
+            self.height = WIDTH;
+        } else {
+            self.width = WIDTH;
+            self.height = HEIGHT;
+        }
+    }
+
+    pub fn get_width(&self) -> i32 {
+        return self.width;
+    }
+
+    pub fn get_height(&self) -> i32 {
+        return self.height;
     }
 
     pub fn draw_block_3d(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, color: lcd::Color) {

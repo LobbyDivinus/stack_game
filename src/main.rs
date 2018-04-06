@@ -22,7 +22,7 @@ const FPS: i32 = 60;
 static TTF: &[u8] = include_bytes!("../RobotoMono-Bold.ttf");
 
 mod renderer;
-use renderer::{Renderer, HEIGHT, WIDTH};
+use renderer::{Renderer};
 
 mod block;
 use block::Block;
@@ -142,6 +142,8 @@ fn main(hw: board::Hardware) -> ! {
     touch::check_family_id(&mut i2c_3).unwrap();
 
     let mut renderer = Renderer::new(layer_1, bg_color);
+    renderer.set_portrait(true);
+    
     let highscore: &mut i32 = &mut 0;
 
     loop {
@@ -154,12 +156,15 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
     let white_color = lcd::Color::from_hex(0xffffff);
 
+    let xmax = renderer.get_width();
+    let ymax = renderer.get_height();
+
     let block_height = 15;
     let mut score = 0;
     let mut cur_stack_height = block_height;
     let mut block_width = 150;
     let mut last_block_width = block_width;
-    let mut last_block_start = (HEIGHT - last_block_width) / 2;
+    let mut last_block_start = (xmax - last_block_width) / 2;
     let mut last_tapped = false;
     let mut last_ms = system_clock::ticks();
     let mut block_color = lcd::Color::rgb(255, 255, 255);
@@ -171,10 +176,10 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
     draw_block(
         renderer,
-        0,
         last_block_start - 1,
-        block_height,
+        ymax - block_height,
         last_block_width,
+        block_height,
         block_color,
     );
 
@@ -182,10 +187,10 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     block_color = Renderer::hsv_color(h, s, v);
 
     let font_renderer = FontRenderer::new(TTF, 20.0);
-    font_renderer.render("Current Score", get_font_drawer_portrait(renderer, 0, 0));
+    font_renderer.render("Current Score", get_font_drawer(renderer, 0, 0));
     font_renderer.render(
         "Highscore",
-        get_font_drawer_portrait(renderer, HEIGHT - 81, 0),
+        get_font_drawer(renderer, xmax - 81, 0),
     );
 
     let mut redraw_score = true;
@@ -214,21 +219,18 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         p = -2f32 * p * p * p + 3f32 * p * p;
         let mut block_start = range_start + (p * range_width as f32) as i32;
 
-        renderer.set_portrait(true);
         for b in &blocks {
-            b.draw(renderer, HEIGHT / 2, WIDTH / 2);
+            b.draw(renderer, xmax / 2, ymax / 2);
         }
-        renderer.set_portrait(false);
 
         draw_block(
             renderer,
-            cur_stack_height,
             block_start,
-            block_height,
+            ymax - cur_stack_height - block_height,
             block_width,
+            block_height,
             block_color,
         );
-
 
         // poll for new touch data
         let mut tapped = false;
@@ -249,10 +251,10 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
             }
             draw_block(
                 renderer,
-                cur_stack_height - 1,
                 block_start,
-                block_height + 1,
+                ymax - cur_stack_height + 1 - block_height,
                 block_width,
+                block_height + 1,
                 block_color,
             );
 
@@ -278,19 +280,19 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         last_tapped = tapped;
 
         if redraw_score {
-            renderer.clear_area(WIDTH - 40, 0, 20, 40);
+            renderer.clear_area(0, 20, 20, 40);
             font_renderer.render(
                 &score.to_string(),
-                get_font_drawer_portrait(renderer, 0, 20),
+                get_font_drawer(renderer, 0, 20),
             );
             redraw_score = false;
         }
         if redraw_highscore {
-            renderer.clear_area(WIDTH - 40, HEIGHT - 40, 20, 40);
+            renderer.clear_area(xmax - 40, 20, 40, 20);
             let text = (*highscore).to_string();
             font_renderer.render(
                 &text,
-                get_font_drawer_portrait(renderer, HEIGHT - 9 * text.chars().count() as i32, 20),
+                get_font_drawer(renderer, xmax - 9 * text.chars().count() as i32, 20),
             );
             redraw_highscore = false;
         }
@@ -306,7 +308,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     }
 }
 
-fn get_font_drawer_portrait<'a>(
+fn get_font_drawer<'a>(
     renderer: &'a mut Renderer,
     px: i32,
     py: i32,
@@ -315,8 +317,8 @@ fn get_font_drawer_portrait<'a>(
         let i = (255f32 * v) as u8;
         if i > 128 {
             renderer.set_pixel(
-                WIDTH - y as i32 - py,
                 x as i32 + px,
+                y as i32 + py,
                 lcd::Color::rgb(i, i, i),
             );
         }
