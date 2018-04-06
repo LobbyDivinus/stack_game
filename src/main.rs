@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(compiler_builtins_lib)]
 #![feature(alloc)]
+#![feature(fnbox)]
+#![feature(unboxed_closures)]
 
 extern crate alloc;
 extern crate compiler_builtins;
@@ -10,6 +12,7 @@ extern crate stm32f7_discovery as stm32f7;
 
 use alloc::String;
 use alloc::string::ToString;
+use alloc::boxed::{Box,FnBox};
 use core::{ptr, fmt::Write};
 use stm32f7::lcd::font::FontRenderer;
 use stm32f7::{board, embedded, lcd, sdram, system_clock, touch, i2c};
@@ -380,7 +383,8 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
             let mut text = String::new();
             text.push_str("Current score: ");
             text.push_str(&cur_stack_height.to_string());
-            font_renderer.render(&text, get_font_drawer(renderer, 0, 0));
+            //let f = get_font_drawer(renderer, 0, 0);
+            //font_renderer.render(&text, f);
         }
         last_tapped = tapped;
 
@@ -395,14 +399,6 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C) {
     }
 }
 
-fn get_font_drawer(renderer: &mut Renderer, px: i32, py: i32) -> Fn(i32, i32, i32) {
-    |x,y,v| {
-        let i = (255f32 * v) as u8;
-        if i > 128 {
-            renderer.set_pixel(WIDTH - y as i32 + py, x as i32 + px, lcd::Color::rgb(i, i, i));
-        }
-    }
-}
 
 fn abs(x: f32) -> f32 {
     if x < 0f32 {

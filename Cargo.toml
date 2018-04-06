@@ -1,5 +1,5 @@
 [package]
-name = "blinking_led"
+name = "stack"
 version = "0.1.0"
 authors = ["Fabio B. <f-bro@mailbox.org>"]
 
