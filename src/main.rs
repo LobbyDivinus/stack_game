@@ -251,7 +251,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
 
             if base_y + current_block.y < ymax / 3 {
                 let min_x = blocks.first().unwrap().min_x(base_x, base_y);
-                let min_y = blocks.last().unwrap().min_y(base_x, base_y);
+                let min_y = blocks.last().unwrap().min_y(base_x, base_y) - 5;
                 let max_x = blocks.first().unwrap().max_x(base_x, base_y);
                 renderer.clear_area(min_x, min_y, max_x - min_x + 1, ymax - min_y);
                 base_y += ymax / 3;
