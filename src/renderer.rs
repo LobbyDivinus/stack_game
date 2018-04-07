@@ -84,15 +84,15 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             self.layer
                 .print_point_color_at(x as usize, y as usize, color);
         } else {
+            self.layer
+                .print_point_color_at(x as usize, y as usize, color);
+
             self.mark_pixel(x, y, true);
+
             let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
             let index = self.drawn_pixel_count[self.current_buffer as usize] + offset;
             self.drawn_pixels_x[index] = x as i16;
             self.drawn_pixels_y[index] = y as i16;
-
-            self.layer
-                .print_point_color_at(x as usize, y as usize, color);
-
             self.drawn_pixel_count[self.current_buffer as usize] += 1;
         }
     }
@@ -101,7 +101,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         let last_buffer = 1 - self.current_buffer;
         let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
         let size = self.drawn_pixel_count[last_buffer as usize];
-        for i in offset..size + offset {
+        for i in 0..size {
             let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
             let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
             self.mark_pixel(x, y, false);
@@ -119,8 +119,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
             if !self.is_pixel_marked(x, y) {
                 let color = self.get_background(x, y);
-                self.layer
-                    .print_point_color_at(x as usize, y as usize, color);
+                self.layer.print_point_color_at(x as usize, y as usize, color);
             }
         }
 
