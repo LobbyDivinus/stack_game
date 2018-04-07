@@ -224,7 +224,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             self.draw_y_oblique(x + width, y, depth, width / 2, 1, width / 2 -depth / 2, top_color);
         } else {
             self.draw_y_oblique(x, y, depth, 1, width / 2, -depth / 2, top_color);
-            self.draw_y_oblique(x + depth, y - depth / 2, width, width / 2, 1, 0, top_color);
+            self.draw_y_oblique(x + depth, y - depth / 2, width, width / 2, 1, width / 2, top_color);
             self.draw_y_oblique(x, y, width, 1, depth / 2, width / 2 - depth / 2, top_color);
             self.draw_y_oblique(x + width, y + width / 2 - depth / 2, depth, depth / 2, 1, 0, top_color);
         }
