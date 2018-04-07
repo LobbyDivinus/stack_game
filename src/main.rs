@@ -249,6 +249,10 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                 }
             }
 
+            if current_block.width < 4 || current_block.depth < 4 {
+                return;
+            }
+
             if base_y + current_block.y < ymax / 3 {
                 let min_x = blocks.first().unwrap().min_x(base_x, base_y);
                 let min_y = blocks.last().unwrap().min_y(base_x, base_y) - 5;
@@ -261,19 +265,13 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                     }
                 }
             }
-
-
+            
             draw_block(renderer, &current_block, base_x, base_y, blocks.len() as i32);
             blocks.push(current_block);
             let last_block = &blocks.last().unwrap();
             current_block = Block::new(last_block.x, last_block.y - block_height, last_block.z, last_block.width, block_height, last_block.depth);
 
-
             last_ms = ms - (ms as i32 % 100) as usize;
-
-            if current_block.width < 4 || current_block.depth < 4 {
-                return;
-            }
 
             score += 1;
             if score > *highscore {
