@@ -10,10 +10,9 @@ extern crate compiler_builtins;
 extern crate r0;
 extern crate stm32f7_discovery as stm32f7;
 
-use alloc::String;
 use alloc::Vec;
+use alloc::boxed::Box;
 use alloc::string::ToString;
-use core::{ptr, fmt::Write};
 use stm32f7::lcd::font::FontRenderer;
 use stm32f7::{board, embedded, lcd, lcd::Color, sdram, system_clock, touch, i2c};
 
@@ -59,7 +58,7 @@ pub unsafe extern "C" fn reset() -> ! {
 }
 
 fn main(hw: board::Hardware) -> ! {
-    use embedded::interfaces::gpio::{self, Gpio};
+    use embedded::interfaces::gpio::Gpio;
 
     let board::Hardware {
         rcc,
@@ -79,12 +78,6 @@ fn main(hw: board::Hardware) -> ! {
         gpio_j,
         gpio_k,
         i2c_3,
-        sai_2,
-        syscfg,
-        ethernet_mac,
-        ethernet_dma,
-        nvic,
-        exti,
         ..
     } = hw;
 
@@ -141,17 +134,42 @@ fn main(hw: board::Hardware) -> ! {
 
     touch::check_family_id(&mut i2c_3).unwrap();
 
-    let mut renderer = Renderer::new(layer_1, bg_color);
+    let black_bg = move |_x, _y| bg_color;
+    let transparent_bg = |_x, _y| Color::rgba(0, 0, 0, 0);
+    let mut renderer = Renderer::new(&mut layer_1, Box::new(black_bg));
+    let mut top_renderer = Renderer::new(&mut layer_2, Box::new(transparent_bg));
+
     renderer.set_portrait(true);
+    top_renderer.set_portrait(true);
 
     let highscore: &mut i32 = &mut 0;
 
     loop {
-        game(&mut renderer, &mut i2c_3, highscore);
+        let f = get_background(&mut renderer);
+        renderer.set_bg(Box::new(f));
+
+        game(&mut renderer, &mut top_renderer, &mut i2c_3, highscore);
+
     }
 }
 
-fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
+fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>) -> impl FnMut(i32, i32) -> Color {
+    let ymax = renderer.get_height();
+    move |x, y| {
+        let mut color = lcd::Color::rgb(0, (y / 5) as u8, 64);
+        if (1329 * (x ^ (y * 717)) + 971) % (ymax - x + 200) == 0 {
+            let mut alpha = y as f32 / ymax as f32;
+            alpha *= alpha;
+            alpha = 1f32 - alpha;
+            color.red = ((1f32 - alpha) * color.red as f32 + alpha * 255f32) as u8;
+            color.green = ((1f32 - alpha) * color.green as f32 + alpha * 255f32) as u8;
+            color.blue = ((1f32 - alpha) * color.blue as f32 + alpha * 255f32) as u8;
+        }
+        color
+    }
+}
+
+fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, top_renderer: &mut Renderer<T>, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     renderer.clear();
 
     let white_color = Color::from_hex(0xffffff);
@@ -159,52 +177,45 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
     let xmax = renderer.get_width();
     let ymax = renderer.get_height();
 
-    let block_height = 15;
     let mut score = 0;
-    let mut cur_stack_height = block_height;
-    let mut block_width = 150;
-    let mut last_block_width = block_width;
-    let mut last_block_start = (xmax - last_block_width) / 2;
     let mut last_tapped = false;
     let mut last_ms = system_clock::ticks();
-    let mut block_color = Color::rgb(255, 255, 255);
-    let mut ms = system_clock::ticks();
+    let mut ms;
 
     let base_x = xmax / 2;
-    let mut base_y = ymax;
+    let base_y = ymax;
 
 
-    let font_renderer = FontRenderer::new(TTF, 20.0);
-    font_renderer.render("Current Score", get_font_drawer(renderer, 0, 0));
-    font_renderer.render("Highscore", get_font_drawer(renderer, xmax - 81, 0));
+    let font = FontRenderer::new(TTF, 20.0);
+    top_renderer.draw_text(&font, "Current Score", 0, 0, white_color);
+    top_renderer.draw_text(&font, "Highscore", xmax - 81, 0, white_color);
 
     let mut redraw_score = true;
     let mut redraw_highscore = true;
 
+    let block_height = 15;
     let mut blocks = Vec::new();
     let mut current_block = Block::new(-50, -60, -50, 100, 60, 100);
     blocks.push(current_block);
     current_block = Block::new(-50, -60 - block_height, -50, 100, block_height, 100);
 
+    
+
     loop {
         ms = system_clock::ticks();
-        renderer.begin_frame();
-
-        let range_start = last_block_start - 5 * last_block_width / 4;
-        let range_width = 10 * last_block_width / 4;
 
         let mut size = current_block.width;
         if current_block.depth > size {
             size = current_block.depth;
         }
-        let mut p_time = 15 * size + 500;
+        let p_time = 30 * size + 500;
         let mut p = ((ms - last_ms) as i32 % p_time) as f32 / p_time as f32 * 2f32;
         if p > 1f32 {
             p = 2f32 - p;
         }
         p = -2f32 * p * p * p + 3f32 * p * p;
-        let mut block_start = range_start + (p * range_width as f32) as i32;
 
+        renderer.begin_frame();
         for (i, b) in blocks.iter().enumerate() {
             let mut color = Color::rgb(180, 180, 180);
             if i == blocks.len() - 1 {
@@ -212,6 +223,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
             }
             b.draw(renderer, base_x, base_y, color);
         }
+        renderer.end_frame();
 
         {
             let last_block = &blocks.last().unwrap();
@@ -220,18 +232,15 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
                     ((3f32 * current_block.width as f32 * (p - 0.5f32)) as i32 - current_block.width / 2 + last_block.x + last_block.width / 2) / 2 * 2;
             } else {
                 current_block.z =
-                    ((3f32 * current_block.depth as f32 * (p - 0.5f32)) as i32 - current_block.depth / 2 + last_block.y + last_block.depth / 2) / 2 * 2;
+                    ((3f32 * current_block.depth as f32 * (p - 0.5f32)) as i32 - current_block.depth / 2 + last_block.z + last_block.depth / 2) / 2 * 2;
             }
-            current_block.draw(renderer, base_x, base_y, white_color);
+            top_renderer.begin_frame();
+            current_block.draw(top_renderer, base_x, base_y, white_color);
+            top_renderer.end_frame();
         }
 
 
-        // poll for new touch data
-        let mut tapped = false;
-        tapped = !&touch::touches(i2c_3).unwrap().is_empty();
-
-        renderer.end_frame();
-
+        let tapped = !&touch::touches(i2c_3).unwrap().is_empty();
         if tapped && !last_tapped {
             {
                 let last_block = &blocks.last().unwrap();
@@ -258,7 +267,7 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
 
             last_ms = ms - (ms as i32 % 100) as usize;
 
-            if current_block.width < 4 || current_block.height < 4 {
+            if current_block.width < 4 || current_block.depth < 4 {
                 return;
             }
 
@@ -273,17 +282,14 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
         last_tapped = tapped;
 
         if redraw_score {
-            renderer.clear_area(0, 20, 20, 40);
-            font_renderer.render(&score.to_string(), get_font_drawer(renderer, 0, 20));
+            top_renderer.clear_area(0, 20, 20, 40);
+            top_renderer.draw_text(&font, &score.to_string(), 0, 20, white_color);
             redraw_score = false;
         }
         if redraw_highscore {
-            renderer.clear_area(xmax - 40, 20, 40, 20);
+            top_renderer.clear_area(xmax - 40, 20, 40, 20);
             let text = (*highscore).to_string();
-            font_renderer.render(
-                &text,
-                get_font_drawer(renderer, xmax - 9 * text.chars().count() as i32, 20),
-            );
+            top_renderer.draw_text(&font, &text, xmax - 9 * text.chars().count() as i32, 20, white_color);
             redraw_highscore = false;
         }
 
@@ -294,19 +300,6 @@ fn game(renderer: &mut Renderer, i2c_3: &mut i2c::I2C, highscore: &mut i32) {
             if cur_ms - ms >= ms_per_frame {
                 break;
             }
-        }
-    }
-}
-
-fn get_font_drawer<'a>(
-    renderer: &'a mut Renderer,
-    px: i32,
-    py: i32,
-) -> impl FnMut(usize, usize, f32) + 'a {
-    move |x, y, v| {
-        let i = (255f32 * v) as u8;
-        if i > 128 {
-            renderer.set_pixel(x as i32 + px, y as i32 + py, Color::rgb(i, i, i));
         }
     }
 }

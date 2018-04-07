@@ -1,49 +1,39 @@
+#![allow(dead_code)]
 
 extern crate stm32f7_discovery as stm32f7;
+extern crate alloc;
 
 use stm32f7::lcd;
+use stm32f7::lcd::Color;
+use stm32f7::lcd::font::FontRenderer;
+use alloc::boxed::Box;
 
 const WIDTH: i32 = 480;
 const HEIGHT: i32 = 272;
 
-const PIXEL_BUFFER_SIZE: usize = 4000;
+const PIXEL_BUFFER_SIZE: usize = 2000;
 
-
-struct Point {
-    x: i16,
-    y: i16,
-}
-
-impl Copy for Point {}
-impl Clone for Point {
-    fn clone(&self) -> Point {
-        Point {
-            x: self.x,
-            y: self.y,
-        }
-    }
-}
-
-pub struct Renderer {
-    bg_color: lcd::Color,
-    pixel_markers: [bool; (WIDTH * HEIGHT) as usize],
-    drawn_pixels: [Point; 2 * PIXEL_BUFFER_SIZE],
+pub struct Renderer<'a, T: lcd::Framebuffer + 'a> {
+    pixel_markers: [u32; ((WIDTH * HEIGHT + 31) / 32) as usize],
+    drawn_pixels_x: [i16; 2 * PIXEL_BUFFER_SIZE],
+    drawn_pixels_y: [i16; 2 * PIXEL_BUFFER_SIZE],
     drawn_pixel_count: [usize; 2],
     current_buffer: u8,
-    layer: lcd::Layer<lcd::FramebufferArgb8888>,
+    layer: &'a mut lcd::Layer<T>,
     direct: bool,
     frame_counter: i32,
     portrait: bool,
     width: i32,
-    height: i32
+    height: i32,
+    bg_func: Box<FnMut(i32, i32) -> Color>
 }
 
-impl Renderer {
-    pub fn new(l: lcd::Layer<lcd::FramebufferArgb8888>, background: lcd::Color) -> Renderer {
+impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
+    pub fn new(l: &'a mut lcd::Layer<T>, background: Box<FnMut(i32, i32) -> Color>) -> Renderer<T> {
         Renderer {
-            bg_color: background,
-            pixel_markers: [false; (WIDTH * HEIGHT) as usize],
-            drawn_pixels: [Point { x: 0, y: 0 }; 2 * PIXEL_BUFFER_SIZE],
+            pixel_markers: [0; ((WIDTH * HEIGHT + 31) / 32) as usize],
+            drawn_pixels_x: [0; 2 * PIXEL_BUFFER_SIZE],
+            drawn_pixels_y: [0; 2 * PIXEL_BUFFER_SIZE],
             drawn_pixel_count: [0; 2],
             current_buffer: 0,
             layer: l,
@@ -51,15 +41,37 @@ impl Renderer {
             frame_counter: 0,
             portrait: false,
             width: WIDTH,
-            height: HEIGHT
+            height: HEIGHT,
+            bg_func: background
         }
     }
 
-    pub fn set_pixel(&mut self, px: i32, py: i32, color: lcd::Color) {
+    pub fn set_bg(&mut self, func: Box<FnMut(i32, i32) -> Color>) {
+        self.bg_func = func;
+    }
+
+    fn mark_pixel(&mut self, x: i32, y: i32, state: bool) {
+        let index = x + y * WIDTH;
+        let mask = 1 << (index % 32);
+        if state {
+            self.pixel_markers[(index / 32) as usize] |= mask;
+        } else {
+            self.pixel_markers[(index / 32) as usize] &= !mask;
+        }
+    }
+
+    fn is_pixel_marked(&mut self, x: i32, y: i32) -> bool {
+        let index = x + y * WIDTH;
+        let mask = 1 << (index % 32);
+        let marker = self.pixel_markers[(index / 32) as usize];
+        marker & mask != 0
+    }
+
+    pub fn set_pixel(&mut self, px: i32, py: i32, color: Color) {
         let mut x = px;
         let mut y = py;
 
-        if (self.portrait) {
+        if self.portrait {
             x = WIDTH - py;
             y = px;
         }
@@ -72,15 +84,14 @@ impl Renderer {
             self.layer
                 .print_point_color_at(x as usize, y as usize, color);
         } else {
-            self.pixel_markers[(x + y * WIDTH) as usize] = true;
+            self.mark_pixel(x, y, true);
             let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
             let index = self.drawn_pixel_count[self.current_buffer as usize] + offset;
-            self.drawn_pixels[index].x = x as i16;
-            self.drawn_pixels[index].y = y as i16;
+            self.drawn_pixels_x[index] = x as i16;
+            self.drawn_pixels_y[index] = y as i16;
 
-            let pixel = self.drawn_pixels[index];
             self.layer
-                .print_point_color_at(pixel.x as usize, pixel.y as usize, color);
+                .print_point_color_at(x as usize, y as usize, color);
 
             self.drawn_pixel_count[self.current_buffer as usize] += 1;
         }
@@ -91,10 +102,9 @@ impl Renderer {
         let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
         let size = self.drawn_pixel_count[last_buffer as usize];
         for i in offset..size + offset {
-            let pixel = self.drawn_pixels[i as usize];
-            let x = pixel.x as i32;
-            let y = pixel.y as i32;
-            self.pixel_markers[(x + y * WIDTH) as usize] = false;
+            let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
+            let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
+            self.mark_pixel(x, y, false);
         }
         self.drawn_pixel_count[self.current_buffer as usize] = 0;
         self.direct = false;
@@ -105,10 +115,9 @@ impl Renderer {
         let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
         let size = self.drawn_pixel_count[last_buffer as usize];
         for i in 0..size {
-            let pixel = self.drawn_pixels[(i + offset) as usize];
-            let x = pixel.x as i32;
-            let y = pixel.y as i32;
-            if !self.pixel_markers[(x + y * WIDTH) as usize] {
+            let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
+            let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
+            if !self.is_pixel_marked(x, y) {
                 let color = self.get_background(x, y);
                 self.layer
                     .print_point_color_at(x as usize, y as usize, color);
@@ -125,13 +134,12 @@ impl Renderer {
             let offset = buf as usize * PIXEL_BUFFER_SIZE;
             let size = self.drawn_pixel_count[buf as usize];
             for i in 0..size {
-                let pixel = self.drawn_pixels[(i + offset) as usize];
-                let x = pixel.x as i32;
-                let y = pixel.y as i32;
+                let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
+                let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
                 let color = self.get_background(x, y);
                 self.layer
                     .print_point_color_at(x as usize, y as usize, color);
-                self.pixel_markers[(x + y * WIDTH) as usize] = false;
+                self.mark_pixel(x, y, false);
             }
             self.drawn_pixel_count[buf as usize] = 0;
         }
@@ -149,7 +157,7 @@ impl Renderer {
     }
 
     pub fn clear_area(&mut self, x: i32, y: i32, w: i32, h: i32) {
-        if (self.portrait) {
+        if self.portrait {
             self.clear_area_landscape(WIDTH - y - h, x, h, w);
         } else {
             self.clear_area_landscape(x, y, w, h);
@@ -157,7 +165,6 @@ impl Renderer {
     }
 
     fn clear_area_landscape(&mut self, x: i32, y: i32, w: i32, h: i32) {
-        self.flush();
         for py in y..y + h {
             for px in x..x + w {
                 let color = self.get_background(px, py);
@@ -167,17 +174,14 @@ impl Renderer {
         }
     }
 
-    pub fn get_background(&self, x: i32, y: i32) -> lcd::Color {
-        let mut color = lcd::Color::rgb(0, ((WIDTH - x) / 5) as u8, 64);
-        if (1329 * (x ^ (y * 717)) + 971) % (WIDTH - x + 200) == 0 {
-            let mut alpha = 1f32 - (x as f32 / WIDTH as f32);
-            alpha *= alpha;
-            alpha = 1f32 - alpha;
-            color.red = ((1f32 - alpha) * color.red as f32 + alpha * 255f32) as u8;
-            color.green = ((1f32 - alpha) * color.green as f32 + alpha * 255f32) as u8;
-            color.blue = ((1f32 - alpha) * color.blue as f32 + alpha * 255f32) as u8;
+    pub fn get_background(&mut self, px: i32, py: i32) -> Color {
+        let mut x = px;
+        let mut y = py;
+        if self.portrait {
+            x = py;
+            y = WIDTH - px;
         }
-        color
+        (self.bg_func)(x, y)
     }
 
     pub fn set_portrait(&mut self, state: bool) {
@@ -199,7 +203,7 @@ impl Renderer {
         return self.height;
     }
 
-    pub fn draw_block_3d(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, color: lcd::Color) {
+    pub fn draw_block_3d(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, color: Color) {
         self.draw_line(x, y, x + width, y + width / 2, color);
         self.draw_line(x + width, y + width / 2, x + width + depth, y + width / 2 - depth / 2, color);
         self.draw_line(x, y, x + depth, y - depth / 2, color);
@@ -213,7 +217,7 @@ impl Renderer {
         self.draw_line(x + width + depth, y + width / 2 - depth / 2, x + width + depth, y + width / 2 - depth / 2 + height, color);
     }
 
-    pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: lcd::Color) {
+    pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: Color) {
         if y0 == y1 {
             for px in x0..=x1 {
                 self.set_pixel(px, y0, color);
@@ -256,7 +260,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw_rect_solid(&mut self, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
+    pub fn draw_rect_solid(&mut self, x: i32, y: i32, w: i32, h: i32, color: Color) {
         for py in y..y + h {
             for px in x..x + w {
                 self.set_pixel(px, py, color);
@@ -264,7 +268,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw_rect(&mut self, x: i32, y: i32, w: i32, h: i32, color: lcd::Color) {
+    pub fn draw_rect(&mut self, x: i32, y: i32, w: i32, h: i32, color: Color) {
         for px in x..x + w {
             self.set_pixel(px, y, color);
         }
@@ -272,14 +276,14 @@ impl Renderer {
             self.set_pixel(x, py, color);
         }
         for py in y + 1..y + h - 1 {
-            self.set_pixel((x + w - 1), py, color);
+            self.set_pixel(x + w - 1, py, color);
         }
         for px in x..x + w {
-            self.set_pixel(px, (y + h - 1), color);
+            self.set_pixel(px, y + h - 1, color);
         }
     }
 
-    pub fn hsv_color(hue: f32, s: f32, v: f32) -> lcd::Color {
+    pub fn hsv_color(hue: f32, s: f32, v: f32) -> Color {
         let h = (hue as i32 % 360) as f32;
 
         let c = v * s;
@@ -317,5 +321,13 @@ impl Renderer {
             (255f32 * rgb.1) as u8,
             (255f32 * rgb.2) as u8,
         )
+    }
+
+    pub fn draw_text(&mut self, font: &FontRenderer, text: &str, x: i32, y: i32, color: Color) {
+        font.render(text, |px, py, v| {
+            let alpha = (255f32 * v) as u8;
+            let c = Color::rgba(color.red, color.green, color.blue, alpha);
+            self.set_pixel(px as i32 + x, py as i32 + y, c)
+        });
     }
 }

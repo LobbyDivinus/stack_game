@@ -1,7 +1,7 @@
 
 extern crate stm32f7_discovery as stm32f7;
 
-use stm32f7::lcd::Color;
+use stm32f7::lcd::{Color, Framebuffer};
 
 use renderer::Renderer;
 
@@ -26,7 +26,7 @@ impl Block {
         }
     }
 
-    pub fn draw(&self, renderer: &mut Renderer, base_x: i32, base_y: i32, color: Color) {
+    pub fn draw<T: Framebuffer>(&self, renderer: &mut Renderer<T>, base_x: i32, base_y: i32, color: Color) {
         renderer.draw_block_3d(
             base_x + self.x + self.z,
             base_y + self.y + self.x / 2 - self.z / 2,
