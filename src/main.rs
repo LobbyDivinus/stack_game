@@ -143,20 +143,28 @@ fn main(hw: board::Hardware) -> ! {
     top_renderer.set_portrait(true);
 
     let highscore: &mut i32 = &mut 0;
+    let mut round = 0;
 
     loop {
-        let f = get_background(&mut renderer);
+        let f = get_background(&mut renderer, round);
         renderer.set_bg(Box::new(f));
 
         game(&mut renderer, &mut top_renderer, &mut i2c_3, highscore);
 
+        round += 1;
     }
 }
 
-fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>) -> impl FnMut(i32, i32) -> Color {
+fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, _round: i32) -> impl FnMut(i32, i32) -> Color {
     let ymax = renderer.get_height();
+    let bg_color = hsv_color(180f32, 1f32, 0.25f32);
     move |x, y| {
-        let mut color = lcd::Color::rgb(0, (y / 5) as u8, 64);
+        let alpha = y as f32 / ymax as f32;
+        let base_color = weight_color(Color::rgb(0, 0, 64), 1f32 - alpha);
+        let mut color = weight_color(bg_color, alpha);
+        color.red += base_color.red;
+        color.green += base_color.green;
+        color.blue += base_color.blue;
         if (1329 * (x ^ (y * 717)) + 971) % (ymax - x + 200) == 0 {
             let mut alpha = y as f32 / ymax as f32;
             alpha *= alpha;
@@ -265,7 +273,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                     }
                 }
             }
-            
+
             draw_block(renderer, &current_block, base_x, base_y, blocks.len() as i32);
             blocks.push(current_block);
             let last_block = &blocks.last().unwrap();
@@ -307,7 +315,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
 }
 
 fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, pos: i32) {
-    let base_color = hsv_color(pos as f32 * 5f32, 0.3f32, 1f32);
+    let base_color = hsv_color(pos as f32 * 5f32, 0.5f32, 1f32);
 
     let outline_color = weight_color(base_color, 1f32);
     let left_color = weight_color(base_color, 0.8f32);
