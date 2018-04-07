@@ -216,6 +216,33 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         self.draw_line(x + width + depth, y + width / 2 - depth / 2, x + width + depth, y + width / 2 - depth / 2 + height, color);
     }
 
+    pub fn draw_block_3d_solid(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, left_color: Color, right_color: Color, top_color: Color) {
+        if depth > width {
+            self.draw_y_oblique(x, y, depth, 1, depth / 2, -depth / 2, top_color);
+            self.draw_y_oblique(x + depth, y - depth / 2, width, depth / 2, 1, width / 2, top_color);
+            self.draw_y_oblique(x, y, width, 1, width / 2, 0, top_color);
+            self.draw_y_oblique(x + width, y, depth, width / 2, 1, width / 2 -depth / 2, top_color);
+        } else {
+            self.draw_y_oblique(x, y, depth, 1, width / 2, -depth / 2, top_color);
+            self.draw_y_oblique(x + depth, y - depth / 2, width, width / 2, 1, 0, top_color);
+            self.draw_y_oblique(x, y, width, 1, depth / 2, width / 2 - depth / 2, top_color);
+            self.draw_y_oblique(x + width, y + width / 2 - depth / 2, depth, depth / 2, 1, 0, top_color);
+        }
+        
+        self.draw_y_oblique(x, y, width, height, height, width / 2, left_color);
+        self.draw_y_oblique(x + width, y + width / 2, depth, height, height, -depth / 2, right_color);
+    }
+
+    pub fn draw_y_oblique(&mut self, x: i32, y:i32, width: i32, height0: i32, height1: i32, y_movement: i32, color: Color) {
+        for i in 0..width {
+            let base_y = y + i * y_movement / width;
+            let h = (height1 - height0) * i / (width - 1) + height0;
+            for j in 0..h {
+                self.set_pixel(x + i, base_y + j, color);
+            }
+        }
+    }
+
     pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: Color) {
         if y0 == y1 {
             for px in x0..=x1 {
@@ -282,46 +309,6 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         }
     }
 
-    pub fn hsv_color(hue: f32, s: f32, v: f32) -> Color {
-        let h = (hue as i32 % 360) as f32;
-
-        let c = v * s;
-        let x = (h as i32 % 120) as f32 / 60f32 - 1f32;
-        let x = c * (1f32 - if x < 0f32 { -x } else { x });
-        let m = v - c;
-
-        let mut rgb = (0f32, 0f32, 0f32);
-        if h < 60f32 {
-            rgb.0 = c;
-            rgb.1 = x;
-        } else if h < 120f32 {
-            rgb.0 = x;
-            rgb.1 = c;
-        } else if h < 180f32 {
-            rgb.1 = c;
-            rgb.2 = x;
-        } else if h < 240f32 {
-            rgb.1 = x;
-            rgb.2 = c;
-        } else if h < 300f32 {
-            rgb.0 = x;
-            rgb.2 = c;
-        } else {
-            rgb.0 = c;
-            rgb.2 = x;
-        }
-
-        rgb.0 += m;
-        rgb.1 += m;
-        rgb.2 += m;
-
-        lcd::Color::rgb(
-            (255f32 * rgb.0) as u8,
-            (255f32 * rgb.1) as u8,
-            (255f32 * rgb.2) as u8,
-        )
-    }
-
     pub fn draw_text(&mut self, font: &FontRenderer, text: &str, x: i32, y: i32, color: Color) {
         font.render(text, |px, py, v| {
             let alpha = (255f32 * v) as u8;
@@ -329,4 +316,48 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             self.set_pixel(px as i32 + x, py as i32 + y, c)
         });
     }
+}
+
+pub fn weight_color(c: Color, w: f32) -> Color {
+    Color::rgb((c.red as f32 * w) as u8, (c.green as f32 * w) as u8, (c.blue as f32 * w) as u8)
+}
+
+pub fn hsv_color(hue: f32, s: f32, v: f32) -> Color {
+    let h = (hue as i32 % 360) as f32;
+
+    let c = v * s;
+    let x = (h as i32 % 120) as f32 / 60f32 - 1f32;
+    let x = c * (1f32 - if x < 0f32 { -x } else { x });
+    let m = v - c;
+
+    let mut rgb = (0f32, 0f32, 0f32);
+    if h < 60f32 {
+        rgb.0 = c;
+        rgb.1 = x;
+    } else if h < 120f32 {
+        rgb.0 = x;
+        rgb.1 = c;
+    } else if h < 180f32 {
+        rgb.1 = c;
+        rgb.2 = x;
+    } else if h < 240f32 {
+        rgb.1 = x;
+        rgb.2 = c;
+    } else if h < 300f32 {
+        rgb.0 = x;
+        rgb.2 = c;
+    } else {
+        rgb.0 = c;
+        rgb.2 = x;
+    }
+
+    rgb.0 += m;
+    rgb.1 += m;
+    rgb.2 += m;
+
+    lcd::Color::rgb(
+        (255f32 * rgb.0) as u8,
+        (255f32 * rgb.1) as u8,
+        (255f32 * rgb.2) as u8,
+    )
 }

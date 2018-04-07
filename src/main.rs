@@ -21,7 +21,7 @@ const FPS: i32 = 60;
 static TTF: &[u8] = include_bytes!("../RobotoMono-Bold.ttf");
 
 mod renderer;
-use renderer::Renderer;
+use renderer::{Renderer, weight_color, hsv_color};
 
 mod block;
 use block::Block;
@@ -183,7 +183,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
     let mut ms;
 
     let base_x = xmax / 2;
-    let base_y = ymax;
+    let mut base_y = ymax;
 
 
     let font = FontRenderer::new(TTF, 20.0);
@@ -196,10 +196,9 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
     let block_height = 15;
     let mut blocks = Vec::new();
     let mut current_block = Block::new(-50, -60, -50, 100, 60, 100);
+    draw_block(renderer, &current_block, base_x, base_y, 0);
     blocks.push(current_block);
     current_block = Block::new(-50, -60 - block_height, -50, 100, block_height, 100);
-
-    
 
     loop {
         ms = system_clock::ticks();
@@ -214,16 +213,6 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
             p = 2f32 - p;
         }
         p = -2f32 * p * p * p + 3f32 * p * p;
-
-        renderer.begin_frame();
-        for (i, b) in blocks.iter().enumerate() {
-            let mut color = Color::rgb(180, 180, 180);
-            if i == blocks.len() - 1 {
-                color = Color::rgb(255, 0, 0);
-            }
-            b.draw(renderer, base_x, base_y, color);
-        }
-        renderer.end_frame();
 
         {
             let last_block = &blocks.last().unwrap();
@@ -260,6 +249,21 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                 }
             }
 
+            if base_y + current_block.y < ymax / 3 {
+                let min_x = blocks.first().unwrap().min_x(base_x, base_y);
+                let min_y = blocks.last().unwrap().min_y(base_x, base_y);
+                let max_x = blocks.first().unwrap().max_x(base_x, base_y);
+                renderer.clear_area(min_x, min_y, max_x - min_x + 1, ymax - min_y);
+                base_y += ymax / 3;
+                for (i, b) in blocks.iter().enumerate() {
+                    if b.min_y(base_x, base_y) < ymax {
+                        draw_block(renderer, b, base_x, base_y, i as i32);
+                    }
+                }
+            }
+
+
+            draw_block(renderer, &current_block, base_x, base_y, blocks.len() as i32);
             blocks.push(current_block);
             let last_block = &blocks.last().unwrap();
             current_block = Block::new(last_block.x, last_block.y - block_height, last_block.z, last_block.width, block_height, last_block.depth);
@@ -303,3 +307,17 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
         }
     }
 }
+
+fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, pos: i32) {
+    let base_color = hsv_color(pos as f32 * 5f32, 0.3f32, 1f32);
+
+    let outline_color = weight_color(base_color, 1f32);
+    let left_color = weight_color(base_color, 0.8f32);
+    let right_color = weight_color(base_color, 0.4f32);
+    let top_color = weight_color(base_color, 0.6f32);
+
+    block.draw_solid(renderer, base_x, base_y, left_color, right_color, top_color);
+    block.draw(renderer, base_x, base_y, outline_color);
+}
+
+
