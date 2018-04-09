@@ -13,17 +13,19 @@ pub struct Block {
     pub width: i32,
     pub height: i32,
     pub depth: i32,
+    pub hue: f32
 }
 
 impl Block {
-    pub fn new(pos_x: i32, pos_y: i32, pos_z: i32, w: i32, h: i32, d: i32) -> Block {
+    pub fn new(pos_x: i32, pos_y: i32, pos_z: i32, w: i32, h: i32, d: i32, hue: f32) -> Block {
         Block {
             x: pos_x,
             y: pos_y,
             z: pos_z,
             width: w,
             height: h,
-            depth: d
+            depth: d,
+            hue: hue
         }
     }
 

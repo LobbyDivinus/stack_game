@@ -4,6 +4,7 @@
 #![feature(alloc)]
 #![feature(fnbox)]
 #![feature(unboxed_closures)]
+#![feature(conservative_impl_trait)]
 
 extern crate alloc;
 extern crate compiler_builtins;
@@ -201,12 +202,14 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
     let mut redraw_score = true;
     let mut redraw_highscore = true;
 
+    let mut hue = (last_ms % 360) as f32;
+
     let block_height = 15;
     let mut blocks = Vec::new();
-    let mut current_block = Block::new(-50, -60, -50, 100, 60, 100);
-    draw_block(renderer, &current_block, base_x, base_y, 0);
+    let mut current_block = Block::new(-50, -60, -50, 100, 60, 100, 0f32);
+    draw_block(renderer, &current_block, base_x, base_y, hue);
     blocks.push(current_block);
-    current_block = Block::new(-50, -60 - block_height, -50, 100, block_height, 100);
+    current_block = Block::new(-50, -60 - block_height, -50, 100, block_height, 100, 0f32);
 
     loop {
         ms = system_clock::ticks();
@@ -267,17 +270,18 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                 let max_x = blocks.first().unwrap().max_x(base_x, base_y);
                 renderer.clear_area(min_x, min_y, max_x - min_x + 1, ymax - min_y);
                 base_y += ymax / 3;
-                for (i, b) in blocks.iter().enumerate() {
+                for b in blocks.iter() {
                     if b.min_y(base_x, base_y) < ymax {
-                        draw_block(renderer, b, base_x, base_y, i as i32);
+                        draw_block(renderer, b, base_x, base_y, b.hue);
                     }
                 }
             }
 
-            draw_block(renderer, &current_block, base_x, base_y, blocks.len() as i32);
+            hue = ((hue as i32 + 10) % 360) as f32; 
+            draw_block(renderer, &current_block, base_x, base_y, hue);
             blocks.push(current_block);
             let last_block = &blocks.last().unwrap();
-            current_block = Block::new(last_block.x, last_block.y - block_height, last_block.z, last_block.width, block_height, last_block.depth);
+            current_block = Block::new(last_block.x, last_block.y - block_height, last_block.z, last_block.width, block_height, last_block.depth, hue);
 
             last_ms = ms - (ms as i32 % 100) as usize;
 
@@ -314,8 +318,8 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
     }
 }
 
-fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, pos: i32) {
-    let base_color = hsv_color(pos as f32 * 5f32, 0.5f32, 1f32);
+fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, hue: f32) {
+    let base_color = hsv_color(hue, 0.5f32, 1f32);
 
     let outline_color = weight_color(base_color, 1f32);
     let left_color = weight_color(base_color, 0.8f32);
@@ -325,5 +329,3 @@ fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, ba
     block.draw_solid(renderer, base_x, base_y, left_color, right_color, top_color);
     block.draw(renderer, base_x, base_y, outline_color);
 }
-
-
