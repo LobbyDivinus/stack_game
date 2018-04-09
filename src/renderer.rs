@@ -17,6 +17,7 @@ pub struct Renderer<'a, T: lcd::Framebuffer + 'a> {
     pixel_markers: [u32; ((WIDTH * HEIGHT + 31) / 32) as usize],
     drawn_pixels_x: [i16; 2 * PIXEL_BUFFER_SIZE],
     drawn_pixels_y: [i16; 2 * PIXEL_BUFFER_SIZE],
+    drawn_pixels_color: [Color; 2 * PIXEL_BUFFER_SIZE],
     drawn_pixel_count: [usize; 2],
     current_buffer: u8,
     layer: &'a mut lcd::Layer<T>,
@@ -34,6 +35,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             pixel_markers: [0; ((WIDTH * HEIGHT + 31) / 32) as usize],
             drawn_pixels_x: [0; 2 * PIXEL_BUFFER_SIZE],
             drawn_pixels_y: [0; 2 * PIXEL_BUFFER_SIZE],
+            drawn_pixels_color: [Color::rgb(0, 0, 0); 2 * PIXEL_BUFFER_SIZE],
             drawn_pixel_count: [0; 2],
             current_buffer: 0,
             layer: l,
@@ -84,15 +86,12 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             self.layer
                 .print_point_color_at(x as usize, y as usize, color);
         } else {
-            self.layer
-                .print_point_color_at(x as usize, y as usize, color);
-
             self.mark_pixel(x, y, true);
-
             let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
             let index = self.drawn_pixel_count[self.current_buffer as usize] + offset;
             self.drawn_pixels_x[index] = x as i16;
             self.drawn_pixels_y[index] = y as i16;
+            self.drawn_pixels_color[index] = color;
             self.drawn_pixel_count[self.current_buffer as usize] += 1;
         }
     }
@@ -112,14 +111,32 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
 
     pub fn end_frame(&mut self) {
         let last_buffer = 1 - self.current_buffer;
-        let offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
-        let size = self.drawn_pixel_count[last_buffer as usize];
-        for i in 0..size {
-            let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
-            let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
-            if !self.is_pixel_marked(x, y) {
-                let color = self.get_background(x, y);
-                self.layer.print_point_color_at(x as usize, y as usize, color);
+        let last_offset = last_buffer as usize * PIXEL_BUFFER_SIZE;
+        let last_size = self.drawn_pixel_count[last_buffer as usize];
+
+        let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
+        let size = self.drawn_pixel_count[self.current_buffer as usize];
+
+        let mut max_size = size;
+        if last_size > max_size {
+            max_size = last_size;
+        }
+
+        for i in 0..max_size {
+            if i < size {
+                let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
+                let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
+                let color = self.drawn_pixels_color[(i + offset) as usize];
+                self.layer
+                    .print_point_color_at(x as usize, y as usize, color);
+            }
+            if i < last_size {
+                let x = self.drawn_pixels_x[(i + last_offset) as usize] as i32;
+                let y = self.drawn_pixels_y[(i + last_offset) as usize] as i32;
+                if !self.is_pixel_marked(x, y) {
+                    let color = self.get_background(x, y);
+                    self.layer.print_point_color_at(x as usize, y as usize, color);
+                }
             }
         }
 
