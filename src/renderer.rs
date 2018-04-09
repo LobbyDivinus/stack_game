@@ -11,7 +11,7 @@ use alloc::boxed::Box;
 const WIDTH: i32 = 480;
 const HEIGHT: i32 = 272;
 
-const PIXEL_BUFFER_SIZE: usize = 2000;
+const PIXEL_BUFFER_SIZE: usize = 3000;
 
 pub struct Renderer<'a, T: lcd::Framebuffer + 'a> {
     pixel_markers: [u32; ((WIDTH * HEIGHT + 31) / 32) as usize],

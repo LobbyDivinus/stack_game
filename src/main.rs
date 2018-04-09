@@ -14,6 +14,7 @@ extern crate stm32f7_discovery as stm32f7;
 use alloc::Vec;
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::string::String;
 use stm32f7::lcd::font::FontRenderer;
 use stm32f7::{board, embedded, lcd, lcd::Color, sdram, system_clock, touch, i2c};
 
@@ -196,6 +197,8 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
 
 
     let font = FontRenderer::new(TTF, 20.0);
+    let big_font = FontRenderer::new(TTF, 32.0);
+
     top_renderer.draw_text(&font, "Current Score", 0, 0, white_color);
     top_renderer.draw_text(&font, "Highscore", xmax - 81, 0, white_color);
 
@@ -261,6 +264,17 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
             }
 
             if current_block.width < 4 || current_block.depth < 4 {
+                let text = "Game Over";
+                let mut score_text = String::from("Your score is ");
+                score_text.push_str(&score.to_string());
+                
+                top_renderer.draw_text(&big_font, text, (xmax - text.len() as i32 * 14) / 2, ymax / 2 - 32, white_color);
+                top_renderer.draw_text(&font, &score_text, (xmax - score_text.len() as i32 * 9) / 2, ymax / 2, white_color);
+
+                top_renderer.begin_frame();
+                top_renderer.draw_text(&big_font, text, (xmax - text.len() as i32 * 14) / 2, ymax / 2 - 32, white_color);
+                top_renderer.draw_text(&font, &score_text, (xmax - score_text.len() as i32 * 9) / 2, ymax / 2, white_color);
+                top_renderer.end_frame();
                 return;
             }
 
@@ -319,12 +333,12 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
 }
 
 fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, hue: f32) {
-    let base_color = fix_color(hsv_color(hue, 0.5f32, 1f32));
+    let base_color = hsv_color(hue, 0.5f32, 1f32);
 
-    let outline_color = weight_color(base_color, 1f32);
-    let left_color = weight_color(base_color, 0.8f32);
-    let right_color = weight_color(base_color, 0.4f32);
-    let top_color = weight_color(base_color, 0.6f32);
+    let outline_color = fix_color(weight_color(base_color, 1f32));
+    let left_color = fix_color(weight_color(base_color, 0.8f32));
+    let right_color = fix_color(weight_color(base_color, 0.4f32));
+    let top_color = fix_color(weight_color(base_color, 0.6f32));
 
     block.draw_solid(renderer, base_x, base_y, left_color, right_color, top_color);
     block.draw(renderer, base_x, base_y, outline_color);
