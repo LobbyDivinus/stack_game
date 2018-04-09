@@ -156,9 +156,9 @@ fn main(hw: board::Hardware) -> ! {
     }
 }
 
-fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, _round: i32) -> impl FnMut(i32, i32) -> Color {
+fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, round: i32) -> impl FnMut(i32, i32) -> Color {
     let ymax = renderer.get_height();
-    let bg_color = hsv_color(180f32, 1f32, 0.25f32);
+    let bg_color = hsv_color(system_clock::ticks() as f32, 1f32, 0.25f32);
     move |x, y| {
         let alpha = y as f32 / ymax as f32;
         let base_color = weight_color(Color::rgb(0, 0, 64), 1f32 - alpha);
@@ -174,7 +174,7 @@ fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, _round: i32)
             color.green = ((1f32 - alpha) * color.green as f32 + alpha * 255f32) as u8;
             color.blue = ((1f32 - alpha) * color.blue as f32 + alpha * 255f32) as u8;
         }
-        color
+        fix_color(color)
     }
 }
 
@@ -319,7 +319,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
 }
 
 fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, base_x: i32, base_y: i32, hue: f32) {
-    let base_color = hsv_color(hue, 0.5f32, 1f32);
+    let base_color = fix_color(hsv_color(hue, 0.5f32, 1f32));
 
     let outline_color = weight_color(base_color, 1f32);
     let left_color = weight_color(base_color, 0.8f32);
@@ -329,3 +329,14 @@ fn draw_block<T: lcd::Framebuffer>(renderer: &mut Renderer<T>, block: &Block, ba
     block.draw_solid(renderer, base_x, base_y, left_color, right_color, top_color);
     block.draw(renderer, base_x, base_y, outline_color);
 }
+
+fn fix_color(color: Color) -> Color {
+    Color::from_hex(swap_bits(color.to_rgb(), 1, 4))
+}
+
+fn swap_bits(value: u32, pos0: u8, pos1: u8) -> u32 {
+    let a = (value & (1 << pos0)) >> pos0;
+    let b = (value & (1 << pos1)) >> pos1;
+    value & !(1 << pos0) & !(1 << pos1) | (a << pos1) | (b << pos0)
+}
+
