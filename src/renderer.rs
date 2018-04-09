@@ -234,20 +234,24 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
     }
 
     pub fn draw_block_3d_solid(&mut self, x: i32, y: i32, width: i32, height: i32, depth: i32, left_color: Color, right_color: Color, top_color: Color) {
-        if depth > width {
-            self.draw_y_oblique(x, y, depth, 1, depth / 2, -depth / 2, top_color);
-            self.draw_y_oblique(x + depth, y - depth / 2, width, depth / 2, 1, width / 2, top_color);
-            self.draw_y_oblique(x, y, width, 1, width / 2, 0, top_color);
-            self.draw_y_oblique(x + width, y, depth, width / 2, 1, width / 2 -depth / 2, top_color);
-        } else {
-            self.draw_y_oblique(x, y, depth, 1, width / 2, -depth / 2, top_color);
-            self.draw_y_oblique(x + depth, y - depth / 2, width, width / 2, 1, width / 2, top_color);
-            self.draw_y_oblique(x, y, width, 1, depth / 2, width / 2 - depth / 2, top_color);
-            self.draw_y_oblique(x + width, y + width / 2 - depth / 2, depth, depth / 2, 1, 0, top_color);
-        }
+        self.draw_triangle_solid_left_to_right(x, y, x + depth, y - depth / 2, x + depth + width, y - depth / 2 + width / 2, top_color);
+        self.draw_triangle_solid_left_to_right(x, y, x + width, y + width / 2, x + depth + width, y - depth / 2 + width / 2, top_color);
         
         self.draw_y_oblique(x, y, width, height, height, width / 2, left_color);
         self.draw_y_oblique(x + width, y + width / 2, depth, height, height, -depth / 2, right_color);
+    }
+
+    pub fn draw_triangle_solid_left_to_right(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
+        let p = x1; // intersection x
+        let q = y0 + (y2 - y0) * (x1 - x0) / (x2 - x0); // intersection y
+
+        if q < y1 {
+            self.draw_y_oblique(x0, y0, p - x0 + 1, 1, y1 - q + 2, q - y0, color); //draw first triangle
+            self.draw_y_oblique(p, q, x2 - p + 1, y1 - q + 2, 1, y2 - q, color); //draw second triangle
+        } else {
+            self.draw_y_oblique(x0, y0, p - x0 + 1, 1, q - y1 + 2, y1 - y0, color); //draw first triangle
+            self.draw_y_oblique(x1, y1, x2 - p + 1, q - y1 + 2, 1, y2 - y1, color); //draw second triangle
+        }
     }
 
     pub fn draw_y_oblique(&mut self, x: i32, y:i32, width: i32, height0: i32, height1: i32, y_movement: i32, color: Color) {
