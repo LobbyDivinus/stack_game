@@ -157,7 +157,7 @@ fn main(hw: board::Hardware) -> ! {
     }
 }
 
-fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, round: i32) -> impl FnMut(i32, i32) -> Color {
+fn get_background<T: lcd::Framebuffer>(renderer: & mut Renderer<T>, _round: i32) -> impl FnMut(i32, i32) -> Color {
     let ymax = renderer.get_height();
     let bg_color = hsv_color(system_clock::ticks() as f32, 1f32, 0.25f32);
     move |x, y| {
@@ -247,6 +247,13 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
         if tapped && !last_tapped {
             {
                 let last_block = &blocks.last().unwrap();
+                let fit_distance = 3;
+
+                if abs(current_block.x - last_block.x) <= fit_distance && abs(current_block.z - last_block.z) <= fit_distance {
+                    current_block.x = last_block.x;
+                    current_block.z = last_block.z;
+                }
+
                 if current_block.x < last_block.x {
                     current_block.width -= last_block.x - current_block.x;
                     current_block.x = last_block.x;
@@ -267,14 +274,13 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                 let text = "Game Over";
                 let mut score_text = String::from("Your score is ");
                 score_text.push_str(&score.to_string());
-                
-                top_renderer.draw_text(&big_font, text, (xmax - text.len() as i32 * 14) / 2, ymax / 2 - 32, white_color);
-                top_renderer.draw_text(&font, &score_text, (xmax - score_text.len() as i32 * 9) / 2, ymax / 2, white_color);
 
+                top_renderer.set_immediate(true);
                 top_renderer.begin_frame();
                 top_renderer.draw_text(&big_font, text, (xmax - text.len() as i32 * 14) / 2, ymax / 2 - 32, white_color);
                 top_renderer.draw_text(&font, &score_text, (xmax - score_text.len() as i32 * 9) / 2, ymax / 2, white_color);
                 top_renderer.end_frame();
+                top_renderer.set_immediate(false);
                 return;
             }
 
@@ -329,6 +335,14 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(renderer: &mut Renderer<S>, to
                 break;
             }
         }
+    }
+}
+
+fn abs(value: i32) -> i32 {
+    if value < 0 {
+        -value
+    } else {
+        value
     }
 }
 

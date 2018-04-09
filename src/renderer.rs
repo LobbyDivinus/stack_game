@@ -26,7 +26,8 @@ pub struct Renderer<'a, T: lcd::Framebuffer + 'a> {
     portrait: bool,
     width: i32,
     height: i32,
-    bg_func: Box<FnMut(i32, i32) -> Color>
+    bg_func: Box<FnMut(i32, i32) -> Color>,
+    immediate: bool
 }
 
 impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
@@ -44,12 +45,17 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             portrait: false,
             width: WIDTH,
             height: HEIGHT,
-            bg_func: background
+            bg_func: background,
+            immediate: false,
         }
     }
 
     pub fn set_bg(&mut self, func: Box<FnMut(i32, i32) -> Color>) {
         self.bg_func = func;
+    }
+
+    pub fn set_immediate(&mut self, state: bool) {
+        self.immediate = state;
     }
 
     fn mark_pixel(&mut self, x: i32, y: i32, state: bool) {
@@ -83,8 +89,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         }
 
         if self.direct {
-            self.layer
-                .print_point_color_at(x as usize, y as usize, color);
+            self.layer.print_point_color_at(x as usize, y as usize, color);
         } else {
             self.mark_pixel(x, y, true);
             let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
@@ -93,6 +98,10 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
             self.drawn_pixels_y[index] = y as i16;
             self.drawn_pixels_color[index] = color;
             self.drawn_pixel_count[self.current_buffer as usize] += 1;
+
+            if self.immediate {
+                self.layer.print_point_color_at(x as usize, y as usize, color);
+            }
         }
     }
 
@@ -117,13 +126,13 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         let offset = self.current_buffer as usize * PIXEL_BUFFER_SIZE;
         let size = self.drawn_pixel_count[self.current_buffer as usize];
 
-        let mut max_size = size;
-        if last_size > max_size {
-            max_size = last_size;
+        let mut max_size = last_size;
+        if size > max_size && !self.immediate {
+            max_size = size;
         }
 
         for i in 0..max_size {
-            if i < size {
+            if i < size && !self.immediate {
                 let x = self.drawn_pixels_x[(i + offset) as usize] as i32;
                 let y = self.drawn_pixels_y[(i + offset) as usize] as i32;
                 let color = self.drawn_pixels_color[(i + offset) as usize];
