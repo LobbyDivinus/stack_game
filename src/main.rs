@@ -278,7 +278,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(
                             }
                         }
                         if is_perfect {
-                            let bonus = 3;
+                            let bonus = 4;
                             current_block.x -= bonus;
                             current_block.z -= bonus;
                             current_block.width += 2 * bonus;
