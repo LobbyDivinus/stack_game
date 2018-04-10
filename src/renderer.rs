@@ -246,8 +246,8 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
         self.draw_triangle_solid_left_to_right(x, y, x + depth, y - depth / 2, x + depth + width, y - depth / 2 + width / 2, top_color);
         self.draw_triangle_solid_left_to_right(x, y, x + width, y + width / 2, x + depth + width, y - depth / 2 + width / 2, top_color);
         
-        self.draw_y_oblique(x, y + 1, width + 1, height, height + 1, width / 2, left_color);
-        self.draw_y_oblique(x + width + 1, y + width / 2, depth, height, height + 1, -depth / 2, right_color);
+        self.draw_y_oblique(x, y + 1, width + 1, height, height, width / 2, left_color);
+        self.draw_y_oblique(x + width + 1, y + width / 2, depth + 1, height, height, -depth / 2, right_color);
     }
 
     pub fn draw_triangle_solid_left_to_right(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
@@ -265,7 +265,7 @@ impl<'a, T: lcd::Framebuffer> Renderer<'a, T> {
 
     pub fn draw_y_oblique(&mut self, x: i32, y:i32, width: i32, height0: i32, height1: i32, y_movement: i32, color: Color) {
         for i in 0..width {
-            let base_y = y + i * y_movement / width;
+            let base_y = y + y_movement * (2 * i + 1) / (2 * width - 2);
             let h = (height1 - height0) * (2 * i + 1) / (2 * width - 2) + height0;
             for j in 0..h {
                 self.set_pixel(x + i, base_y + j, color);

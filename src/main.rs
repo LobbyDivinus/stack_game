@@ -277,7 +277,7 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(
                                 break;
                             }
                         }
-                        if (is_perfect) {
+                        if is_perfect {
                             let bonus = 3;
                             current_block.x -= bonus;
                             current_block.z -= bonus;
@@ -303,7 +303,6 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(
                             current_block.z + current_block.depth - last_block.z - last_block.depth;
                     }
                 }
-
             }
 
             if current_block.width < 4 || current_block.depth < 4 {
@@ -333,9 +332,9 @@ fn game<S: lcd::Framebuffer, T: lcd::Framebuffer>(
             }
 
             if base_y + current_block.y < ymax / 3 {
-                let min_x = blocks.first().unwrap().min_x(base_x, base_y);
+                let min_x = blocks.first().unwrap().min_x(base_x, base_y) - 5;
                 let min_y = blocks.last().unwrap().min_y(base_x, base_y) - 5;
-                let max_x = blocks.first().unwrap().max_x(base_x, base_y);
+                let max_x = blocks.first().unwrap().max_x(base_x, base_y) + 5;
                 renderer.clear_area(min_x, min_y, max_x - min_x + 1, ymax - min_y);
                 base_y += ymax / 3;
                 for b in blocks.iter() {
@@ -417,7 +416,7 @@ fn draw_block<T: lcd::Framebuffer>(
 ) {
     let base_color = hsv_color(hue, 0.5f32, 1f32);
 
-    let outline_color = fix_color(weight_color(base_color, 1f32));
+    let _outline_color = fix_color(weight_color(base_color, 1f32));
     let left_color = fix_color(weight_color(base_color, 1f32));
     let right_color = fix_color(weight_color(base_color, 0.6f32));
     let top_color = fix_color(weight_color(base_color, 0.8f32));
